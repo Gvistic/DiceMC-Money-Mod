@@ -57,7 +57,7 @@ import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.ChunkWatchEvent;
 import net.neoforged.neoforge.items.IItemHandler;
 
-@EventBusSubscriber( modid=MoneyMod.MOD_ID, bus= EventBusSubscriber.Bus.GAME)
+@EventBusSubscriber(modid = MoneyMod.MOD_ID, bus = EventBusSubscriber.Bus.GAME)
 public class EventHandler {
 	public static final String IS_SHOP = "is-shop";
 	public static final String ACTIVATED = "shop-activated";
@@ -65,6 +65,7 @@ public class EventHandler {
 	public static final String ITEMS = "items";
 	public static final String TYPE = "shop-type";
 	public static final String PRICE = "price";
+	public static final String QUANTITY = "quantity";
 
 	@SuppressWarnings("resource")
 	@SubscribeEvent
@@ -74,7 +75,7 @@ public class EventHandler {
 			player.sendSystemMessage(Component.literal(Config.getFormattedCurrency(balP)));
 		}
 	}
-	
+
 	@SuppressWarnings("resource")
 	@SubscribeEvent
 	public static void onPlayerDeath(LivingDeathEvent event) {
@@ -84,45 +85,50 @@ public class EventHandler {
 			if (loss > 0) {
 				MoneyWSD.get().changeBalance(AcctTypes.PLAYER.key, player.getUUID(), -loss);
 				if (Config.ENABLE_HISTORY.get()) {
-					MoneyMod.dbm.postEntry(System.currentTimeMillis(), DatabaseManager.NIL, AcctTypes.SERVER.key, "Server"
-							, player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString()
-							, -loss, "Loss on Death Event");
+					MoneyMod.dbm.postEntry(System.currentTimeMillis(), DatabaseManager.NIL, AcctTypes.SERVER.key,
+							"Server", player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString(), -loss,
+							"Loss on Death Event");
 				}
 				player.sendSystemMessage(Component.translatable("message.death", Config.getFormattedCurrency(loss)));
 			}
 		}
 	}
 
-	/**checks if the block being placed would border a shop sign and cancels the placement.
+	/**
+	 * checks if the block being placed would border a shop sign and cancels the
+	 * placement.
 	 */
 	@SubscribeEvent
 	public static void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
-		if (event.getLevel().isClientSide() || event.isCanceled()) return;
-		boolean cancel = Arrays.stream(Direction.values()).anyMatch(direction ->
-				event.getLevel().getBlockEntity(event.getPos().relative(direction)) instanceof BlockEntity be
-				&& be.getPersistentData().contains(IS_SHOP));
+		if (event.getLevel().isClientSide() || event.isCanceled())
+			return;
+		boolean cancel = Arrays.stream(Direction.values())
+				.anyMatch(direction -> event.getLevel()
+						.getBlockEntity(event.getPos().relative(direction)) instanceof BlockEntity be
+						&& be.getPersistentData().contains(IS_SHOP));
 		event.setCanceled(cancel);
 	}
 
 	@SubscribeEvent
 	public static void onShopBreak(BlockEvent.BreakEvent event) {
-		if (!event.getLevel().isClientSide() && event.getLevel().getBlockState(event.getPos()).getBlock() instanceof WallSignBlock) {
+		if (!event.getLevel().isClientSide()
+				&& event.getLevel().getBlockState(event.getPos()).getBlock() instanceof WallSignBlock) {
 			SignBlockEntity tile = (SignBlockEntity) event.getLevel().getBlockEntity(event.getPos());
 			CompoundTag nbt = tile.getPersistentData();
 			if (!nbt.isEmpty() && nbt.contains(ACTIVATED)) {
 				Player player = event.getPlayer();
 				boolean hasPerms = player.hasPermissions(Config.ADMIN_LEVEL.get());
 				if (!nbt.getUUID(OWNER).equals(player.getUUID())) {
-					event.setCanceled(!hasPerms);					
-				}
-				else if(nbt.getUUID(OWNER).equals(player.getUUID()) || hasPerms) {
-					BlockPos backBlock = BlockPos.of(BlockPos.offset(event.getPos().asLong(), tile.getBlockState().getValue(WallSignBlock.FACING).getOpposite()));
+					event.setCanceled(!hasPerms);
+				} else if (nbt.getUUID(OWNER).equals(player.getUUID()) || hasPerms) {
+					BlockPos backBlock = BlockPos.of(BlockPos.offset(event.getPos().asLong(),
+							tile.getBlockState().getValue(WallSignBlock.FACING).getOpposite()));
 					event.getLevel().getBlockEntity(backBlock).getPersistentData().remove(IS_SHOP);
 				}
 			}
-		}
-		else if (!event.getLevel().isClientSide() && event.getLevel().getBlockEntity(event.getPos()) != null) {
-			IItemHandler inv = event.getLevel().getBlockEntity(event.getPos()).getLevel().getCapability(Capabilities.ItemHandler.BLOCK, event.getPos(), null);
+		} else if (!event.getLevel().isClientSide() && event.getLevel().getBlockEntity(event.getPos()) != null) {
+			IItemHandler inv = event.getLevel().getBlockEntity(event.getPos()).getLevel()
+					.getCapability(Capabilities.ItemHandler.BLOCK, event.getPos(), null);
 			if (inv != null) {
 				if (event.getLevel().getBlockEntity(event.getPos()).getPersistentData().contains(IS_SHOP)) {
 					Player player = event.getPlayer();
@@ -131,7 +137,7 @@ public class EventHandler {
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public static void onStorageOpen(PlayerInteractEvent.RightClickBlock event) {
 		BlockEntity invTile = event.getLevel().getBlockEntity(event.getPos());
@@ -139,12 +145,12 @@ public class EventHandler {
 		if (invTile != null && inv != null) {
 			if (invTile.getPersistentData().contains(IS_SHOP)) {
 				if (!invTile.getPersistentData().getUUID(OWNER).equals(event.getEntity().getUUID())) {
-					event.setCanceled(!event.getEntity().hasPermissions(Config.ADMIN_LEVEL.get()));					
+					event.setCanceled(!event.getEntity().hasPermissions(Config.ADMIN_LEVEL.get()));
 				}
 			}
 		}
 	}
-	
+
 	@SuppressWarnings("resource")
 	@SubscribeEvent
 	public static void onSignLeftClick(PlayerInteractEvent.LeftClickBlock event) {
@@ -154,18 +160,20 @@ public class EventHandler {
 			SignBlockEntity tile = (SignBlockEntity) event.getLevel().getBlockEntity(event.getPos());
 			CompoundTag nbt = tile.getPersistentData();
 			if (nbt.contains(ACTIVATED))
-				getSaleInfo(nbt, event.getEntity(), itemLookup(event.getLevel().registryAccess()));
+				getSaleInfo(nbt, event.getEntity(), itemLookup(event.getLevel().registryAccess()),
+						event.getEntity().isShiftKeyDown());
 		}
 	}
-	
+
 	@SubscribeEvent
 	public static void onSignLoad(ChunkWatchEvent.Watch event) {
-		if (event.getLevel().isClientSide()) return;
+		if (event.getLevel().isClientSide())
+			return;
 		BiConsumer<BlockPos, BlockState> fixer = (pos, state) -> {
 			if (event.getChunk().getBlockEntity(pos) instanceof SignBlockEntity signBlockEntity) {
 				if (signBlockEntity.getPersistentData().contains(ACTIVATED) &&
-					Arrays.stream(signBlockEntity.getFrontText().getMessages(false)).allMatch(CommonComponents.EMPTY::equals)
-				){
+						Arrays.stream(signBlockEntity.getFrontText().getMessages(false))
+								.allMatch(CommonComponents.EMPTY::equals)) {
 					Component[] text = signBlockEntity.getFrontText().getMessages(true);
 					signBlockEntity.setText(new SignText(text, text, DyeColor.BLACK, false), true);
 					signBlockEntity.setChanged();
@@ -173,71 +181,91 @@ public class EventHandler {
 				}
 			}
 		};
-		event.getChunk().findBlocks((blockState) -> blockState.getBlock() instanceof WallSignBlock && blockState.hasBlockEntity(), fixer);
+		event.getChunk().findBlocks(
+				(blockState) -> blockState.getBlock() instanceof WallSignBlock && blockState.hasBlockEntity(), fixer);
 	}
 
 	@SubscribeEvent
 	public static void onSignRightClick(PlayerInteractEvent.RightClickBlock event) {
 		BlockState state = event.getLevel().getBlockState(event.getPos());
 		if (!event.getLevel().isClientSide && state.getBlock() instanceof WallSignBlock) {
-			BlockPos backBlock = BlockPos.of(BlockPos.offset(event.getPos().asLong(), state.getValue(WallSignBlock.FACING).getOpposite()));
-			if (event.getLevel().getBlockEntity(backBlock) instanceof  BlockEntity invTile) {
+			BlockPos backBlock = BlockPos
+					.of(BlockPos.offset(event.getPos().asLong(), state.getValue(WallSignBlock.FACING).getOpposite()));
+			if (event.getLevel().getBlockEntity(backBlock) instanceof BlockEntity invTile) {
 				SignBlockEntity tile = (SignBlockEntity) event.getLevel().getBlockEntity(event.getPos());
 				if (!tile.getPersistentData().contains(ACTIVATED)) {
 					if (activateShop(invTile, tile, event.getLevel(), event.getPos(), event.getEntity()))
 						event.setUseBlock(TriState.FALSE);
-				}
-				else {
-					processTransaction(invTile, tile, event.getEntity());
+				} else {
+					processTransaction(invTile, tile, event.getEntity(), event.getEntity().isShiftKeyDown());
 					event.setUseBlock(TriState.FALSE);
 				}
 			}
 		}
 	}
-	
-	private static boolean activateShop(BlockEntity storage, SignBlockEntity tile, Level world, BlockPos pos, Player player) {
+
+	private static boolean activateShop(BlockEntity storage, SignBlockEntity tile, Level world, BlockPos pos,
+			Player player) {
 		HolderLookup.Provider provider = itemLookup(world.registryAccess());
 		Component actionEntry = tile.getFrontText().getMessage(0, true);
 		double price = 0.0;
 		try {
 			price = Math.abs(Double.valueOf(tile.getFrontText().getMessage(3, true).getString()));
-		}
-		catch(NumberFormatException e) {
+		} catch (NumberFormatException e) {
 			player.sendSystemMessage(Component.translatable("message.activate.failure.money"));
 			world.destroyBlock(pos, true, player);
 			return false;
 		}
-		//first confirm the action type is valid
+		// first confirm the action type is valid
 		String shopString = switch (actionEntry.getString().toLowerCase()) {
 			case "[buy]" -> player.hasPermissions(Config.SHOP_LEVEL.get()) ? "buy" : null;
-			case "[sell]" -> player.hasPermissions(Config.SHOP_LEVEL.get()) ? "sell": null;
+			case "[sell]" -> player.hasPermissions(Config.SHOP_LEVEL.get()) ? "sell" : null;
 			case "[server-buy]", "[server-sell]" -> {
 				if (!player.hasPermissions(Config.ADMIN_LEVEL.get())) {
 					player.sendSystemMessage(Component.translatable("message.activate.failure.admin"));
 					yield null;
 				}
-				yield actionEntry.getString().toLowerCase().replace("[","").replace("]","");
+				yield actionEntry.getString().toLowerCase().replace("[", "").replace("]", "");
 			}
-			default ->  null;
+			default -> null;
 		};
-		if (shopString == null) return false;
-		//check if the storage block has an item in the inventory
+		if (shopString == null)
+			return false;
+		// parse optional quantity from line 3
+		int quantity = 1;
+		boolean hasQuantity = false;
+		String line3Text = tile.getFrontText().getMessage(2, true).getString().trim();
+		if (!line3Text.isEmpty()) {
+			try {
+				quantity = Integer.parseInt(line3Text);
+				if (quantity < 1)
+					quantity = 1;
+				hasQuantity = true;
+			} catch (NumberFormatException e) {
+				/* not a number, leave as decorative text */ }
+		}
+		// check if the storage block has an item in the inventory
 		IItemHandler inv = Arrays.stream(Direction.values()).map(direction -> {
 			IItemHandler invi = world.getCapability(Capabilities.ItemHandler.BLOCK, storage.getBlockPos(), direction);
 			for (int i = 0; i < invi.getSlots(); i++) {
-				if (!invi.getStackInSlot(i).isEmpty()) return invi;
+				if (!invi.getStackInSlot(i).isEmpty())
+					return invi;
 			}
 			return null;
 		}).filter(Objects::nonNull).findFirst().orElse(null);
-		if (inv == null) return false;
+		if (inv == null)
+			return false;
 
-		//store shop data on sign
+		// store shop data on sign
 		tile.getPersistentData().putDouble(PRICE, price);
+		tile.getPersistentData().putInt(QUANTITY, quantity);
 
 		Component[] signText = new Component[] {
 				Component.literal(actionEntry.getString()).withStyle(ChatFormatting.BLUE),
 				tile.getFrontText().getMessage(1, true),
-				tile.getFrontText().getMessage(2, true),
+				hasQuantity
+						? Component.literal("Qty: " + quantity).withStyle(ChatFormatting.GREEN)
+						: tile.getFrontText().getMessage(2, true),
 				Component.literal(Config.getFormattedCurrency(price)).withStyle(ChatFormatting.GOLD)
 		};
 
@@ -245,11 +273,12 @@ public class EventHandler {
 		tile.getPersistentData().putString(TYPE, shopString);
 		tile.getPersistentData().putBoolean(ACTIVATED, true);
 		tile.getPersistentData().putUUID(OWNER, player.getUUID());
-		//Serialize all items in the TE and store them in a ListNBT
+		// Serialize all items in the TE and store them in a ListNBT
 		ListTag lnbt = new ListTag();
 		for (int i = 0; i < inv.getSlots(); i++) {
 			ItemStack inSlot = inv.getStackInSlot(i);
-			if (inSlot.isEmpty()) continue;
+			if (inSlot.isEmpty())
+				continue;
 			if (inSlot.getItem() instanceof WritableBookItem)
 				lnbt.add(getItemFromBook(inSlot, itemLookup(player.level().registryAccess())));
 			else
@@ -265,7 +294,7 @@ public class EventHandler {
 		world.sendBlockUpdated(pos, state, state, Block.UPDATE_CLIENTS);
 		return true;
 	}
-	
+
 	private static CompoundTag getItemFromBook(ItemStack stack, HolderLookup.Provider provider) {
 		String page = stack.get(DataComponents.WRITABLE_BOOK_CONTENT).getPages(false).toList().getFirst();
 		if (page.substring(0, 7).equalsIgnoreCase("vending")) {
@@ -273,30 +302,40 @@ public class EventHandler {
 			try {
 				stack = ItemStack.parse(provider, TagParser.parseTag(subStr)).get();
 				return (CompoundTag) stack.save(provider);
+			} catch (CommandSyntaxException | NoSuchElementException e) {
+				e.printStackTrace();
 			}
-			catch(CommandSyntaxException | NoSuchElementException e) {e.printStackTrace();}
-			
+
 		}
 		return (CompoundTag) stack.save(provider);
 	}
-	
-	private static void getSaleInfo(CompoundTag nbt, Player player, HolderLookup.Provider provider) {
+
+	private static void getSaleInfo(CompoundTag nbt, Player player, HolderLookup.Provider provider, boolean showFull) {
 		String type = nbt.getString(TYPE);
 		boolean isBuy = type.equalsIgnoreCase("buy") || type.equalsIgnoreCase("server-buy");
+		int baseQuantity = nbt.contains(QUANTITY) ? nbt.getInt(QUANTITY) : 1;
+		int quantity = showFull ? 64 : baseQuantity;
+		double value = nbt.getDouble(PRICE);
+		if (showFull && baseQuantity > 0)
+			value = value * (64.0 / baseQuantity);
 		List<ItemStack> transItems = new ArrayList<>();
 		ListTag itemsList = nbt.getList(ITEMS, Tag.TAG_COMPOUND);
 		for (int i = 0; i < itemsList.size(); i++) {
-			transItems.add(ItemStack.parse(provider, itemsList.getCompound(i)).orElse(new ItemStack(Items.AIR)));
+			ItemStack stack = ItemStack.parse(provider, itemsList.getCompound(i)).orElse(new ItemStack(Items.AIR));
+			if (quantity > 1)
+				stack.setCount(quantity);
+			transItems.add(stack);
 		}
-		double value = nbt.getDouble(PRICE);
 		MutableComponent itemComponent = getTransItemsDisplayString(transItems);
 		if (isBuy)
-			player.sendSystemMessage(Component.translatable("message.shop.info", itemComponent, Config.getFormattedCurrency(value)));
+			player.sendSystemMessage(
+					Component.translatable("message.shop.info", itemComponent, Config.getFormattedCurrency(value)));
 		else
-			player.sendSystemMessage(Component.translatable("message.shop.info", Config.getFormattedCurrency(value), itemComponent));
+			player.sendSystemMessage(
+					Component.translatable("message.shop.info", Config.getFormattedCurrency(value), itemComponent));
 	}
-	
-	private static MutableComponent getTransItemsDisplayString(List<ItemStack> list ) {
+
+	private static MutableComponent getTransItemsDisplayString(List<ItemStack> list) {
 		List<ItemStack> items = new ArrayList<>();
 		for (int l = 0; l < list.size(); l++) {
 			boolean hadMatch = false;
@@ -307,28 +346,39 @@ public class EventHandler {
 					break;
 				}
 			}
-			if (!hadMatch) items.add(list.get(l));
+			if (!hadMatch)
+				items.add(list.get(l));
 		}
 		MutableComponent itemComponent = Component.literal("");
 		boolean isFirst = true;
 		for (ItemStack item : items) {
-			if (!isFirst) itemComponent.append(", ");
-			itemComponent.append(item.getCount()+"x ");
-			itemComponent.append(item.getDisplayName());
+			if (!isFirst)
+				itemComponent.append(", ");
+			itemComponent.append(item.getCount() + "x ");
+			ItemStack displayCopy = item.copyWithCount(1);
+			itemComponent.append(displayCopy.getDisplayName());
 			isFirst = false;
 		}
 		return itemComponent;
 	}
-	
-	private static void processTransaction(BlockEntity tile, SignBlockEntity sign, Player player) {
+
+	private static void processTransaction(BlockEntity tile, SignBlockEntity sign, Player player, boolean isSneaking) {
 		MoneyWSD wsd = MoneyWSD.get();
 		CompoundTag nbt = sign.getPersistentData();
+		int baseQuantity = nbt.contains(QUANTITY) ? nbt.getInt(QUANTITY) : 1;
+		int quantity = isSneaking ? 64 : baseQuantity;
+		double value = nbt.getDouble(PRICE);
+		if (isSneaking && baseQuantity > 0)
+			value = value * (64.0 / baseQuantity);
 		IItemHandler inv = player.level().getCapability(Capabilities.ItemHandler.BLOCK, tile.getBlockPos(), null);
 		List<ItemStack> transItems = new ArrayList<>();
 		Map<ItemStack, ItemStack> consolidatedItems = new HashMap<>();
 		ListTag itemsList = nbt.getList(ITEMS, Tag.TAG_COMPOUND);
 		for (int i = 0; i < itemsList.size(); i++) {
-			ItemStack srcStack = ItemStack.parse(itemLookup(player.level().registryAccess()), itemsList.getCompound(i)).orElse(new ItemStack(Items.AIR));
+			ItemStack srcStack = ItemStack.parse(itemLookup(player.level().registryAccess()), itemsList.getCompound(i))
+					.orElse(new ItemStack(Items.AIR));
+			if (quantity > 1)
+				srcStack.setCount(quantity);
 			ItemStack keyStack = srcStack.copy();
 			keyStack.setCount(1);
 			boolean hasEntry = false;
@@ -338,17 +388,17 @@ public class EventHandler {
 					hasEntry = true;
 				}
 			}
-			if (!hasEntry) consolidatedItems.put(keyStack, srcStack);
+			if (!hasEntry)
+				consolidatedItems.put(keyStack, srcStack);
 		}
 		for (Map.Entry<ItemStack, ItemStack> map : consolidatedItems.entrySet()) {
 			transItems.add(map.getValue());
 		}
-		//ItemStack transItem = ItemStack.of(nbt.getCompound("item"));
+		// ItemStack transItem = ItemStack.of(nbt.getCompound("item"));
 		String action = nbt.getString(TYPE);
-		double value = nbt.getDouble(PRICE);
-		//================BUY=================================================================================
-		if (action.equalsIgnoreCase("buy")) { //BUY
-			//First check the available funds and stock for trade
+		// ================BUY=================================================================================
+		if (action.equalsIgnoreCase("buy")) { // BUY
+			// First check the available funds and stock for trade
 			double balP = wsd.getBalance(AcctTypes.PLAYER.key, player.getUUID());
 			if (value > balP) {
 				player.sendSystemMessage(Component.translatable("message.shop.buy.failure.funds"));
@@ -356,61 +406,70 @@ public class EventHandler {
 			}
 			Map<Integer, ItemStack> slotMap = new HashMap<>();
 			for (int tf = 0; tf < transItems.size(); tf++) {
-				int[] stackSize = {transItems.get(tf).getCount()};
+				int[] stackSize = { transItems.get(tf).getCount() };
 				final Integer t = Integer.valueOf(tf);
 				boolean test = false;
 				for (int i = 0; i < inv.getSlots(); i++) {
 					ItemStack inSlot;
-					if (slotMap.containsKey(i) && transItems.get(t).getItem().equals(slotMap.get(i).getItem()) && ItemStack.matches(transItems.get(t), slotMap.get(i))) {
-						inSlot = inv.extractItem(i, stackSize[0]+slotMap.get(i).getCount(), true);
+					if (slotMap.containsKey(i) && transItems.get(t).getItem().equals(slotMap.get(i).getItem())
+							&& ItemStack.matches(transItems.get(t), slotMap.get(i))) {
+						inSlot = inv.extractItem(i, stackSize[0] + slotMap.get(i).getCount(), true);
 						inSlot.shrink(slotMap.get(i).getCount());
-					}
-					else inSlot = inv.extractItem(i, stackSize[0], true);
-					if (inSlot.getItem().equals(transItems.get(t).getItem()) && ItemStack.matches(inSlot, transItems.get(t))) {
-						slotMap.merge(i, inSlot, (s, o) -> {s.grow(o.getCount()); return s;});
+					} else
+						inSlot = inv.extractItem(i, stackSize[0], true);
+					if (inSlot.getItem().equals(transItems.get(t).getItem())
+							&& ItemStack.matches(inSlot, transItems.get(t))) {
+						slotMap.merge(i, inSlot, (s, o) -> {
+							s.grow(o.getCount());
+							return s;
+						});
 						stackSize[0] -= inSlot.getCount();
 					}
-					if (stackSize[0] <= 0) break;
+					if (stackSize[0] <= 0)
+						break;
 				}
-				test =  stackSize[0] <= 0;
+				test = stackSize[0] <= 0;
 				if (!test) {
 					player.sendSystemMessage(Component.translatable("message.shop.buy.failure.stock"));
 					return;
 				}
 			}
-			//Test if container has inventory to process.
-			//If so, process transfer of items and funds.			
+			// Test if container has inventory to process.
+			// If so, process transfer of items and funds.
 			UUID shopOwner = nbt.getUUID(OWNER);
 			wsd.transferFunds(AcctTypes.PLAYER.key, player.getUUID(), AcctTypes.PLAYER.key, shopOwner, value);
 			if (Config.ENABLE_HISTORY.get()) {
 				String itemPrint = "";
-				itemsList.forEach((a) -> {itemPrint.concat(a.getAsString());});
-				MoneyMod.dbm.postEntry(System.currentTimeMillis(), player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString()
-						, shopOwner, AcctTypes.PLAYER.key, player.getServer().getProfileCache().get(shopOwner).get().getName()
-						, value, itemsList.getAsString());
+				itemsList.forEach((a) -> {
+					itemPrint.concat(a.getAsString());
+				});
+				MoneyMod.dbm.postEntry(System.currentTimeMillis(), player.getUUID(), AcctTypes.PLAYER.key,
+						player.getName().getString(), shopOwner, AcctTypes.PLAYER.key,
+						player.getServer().getProfileCache().get(shopOwner).get().getName(), value,
+						itemsList.getAsString());
 			}
 			for (Map.Entry<Integer, ItemStack> map : slotMap.entrySet()) {
 				ItemStack pStack = inv.extractItem(map.getKey(), map.getValue().getCount(), false);
 				if (!player.addItem(pStack))
 					player.drop(pStack, false);
 			}
-			MutableComponent msg =  Component.translatable("message.shop.buy.success"
-					, getTransItemsDisplayString(transItems), Config.getFormattedCurrency(value));
+			MutableComponent msg = Component.translatable("message.shop.buy.success",
+					getTransItemsDisplayString(transItems), Config.getFormattedCurrency(value));
 			player.displayClientMessage(msg, true);
 			player.getServer().sendSystemMessage(msg);
 			return;
 		}
-		//================SELL=================================================================================
-		else if (action.equalsIgnoreCase("sell")) { //SELL
-			//First check the available funds and stock for trade
+		// ================SELL=================================================================================
+		else if (action.equalsIgnoreCase("sell")) { // SELL
+			// First check the available funds and stock for trade
 			UUID shopOwner = nbt.getUUID(OWNER);
 			double balP = wsd.getBalance(AcctTypes.PLAYER.key, shopOwner);
 			if (value > balP) {
 				player.sendSystemMessage(Component.translatable("message.shop.sell.failure.funds"));
 				return;
 			}
-			//test if player has item in inventory to sell
-			//next test that the inventory has space
+			// test if player has item in inventory to sell
+			// next test that the inventory has space
 			Map<Integer, ItemStack> slotMap = new HashMap<>();
 			for (int t = 0; t < transItems.size(); t++) {
 				int stackSize = transItems.get(t).getCount();
@@ -418,61 +477,71 @@ public class EventHandler {
 					ItemStack inSlot = player.getInventory().getItem(i).copy();
 					int count = stackSize > inSlot.getCount() ? inSlot.getCount() : stackSize;
 					inSlot.setCount(count);
-					if (slotMap.containsKey(i) && transItems.get(t).getItem().equals(slotMap.get(i).getItem()) && ItemStack.matches(transItems.get(t), slotMap.get(i))) {
-						count = stackSize+slotMap.get(i).getCount() > inSlot.getCount() ? inSlot.getCount() : stackSize+slotMap.get(i).getCount();
+					if (slotMap.containsKey(i) && transItems.get(t).getItem().equals(slotMap.get(i).getItem())
+							&& ItemStack.matches(transItems.get(t), slotMap.get(i))) {
+						count = stackSize + slotMap.get(i).getCount() > inSlot.getCount() ? inSlot.getCount()
+								: stackSize + slotMap.get(i).getCount();
 						inSlot.setCount(count);
 					}
-					if (inSlot.getItem().equals(transItems.get(t).getItem()) && ItemStack.matches(inSlot, transItems.get(t))) {
-						slotMap.merge(i, inSlot, (s, o) -> {s.grow(o.getCount()); return s;});
+					if (inSlot.getItem().equals(transItems.get(t).getItem())
+							&& ItemStack.matches(inSlot, transItems.get(t))) {
+						slotMap.merge(i, inSlot, (s, o) -> {
+							s.grow(o.getCount());
+							return s;
+						});
 						stackSize -= inSlot.getCount();
-					}						
-					if (stackSize <= 0) break;
+					}
+					if (stackSize <= 0)
+						break;
 				}
 				if (stackSize > 0) {
 					player.sendSystemMessage(Component.translatable("message.shop.sell.failure.stock"));
 					return;
 				}
-				
+
 			}
 			Map<Integer, ItemStack> invSlotMap = new HashMap<>();
-            for (ItemStack transItem : transItems) {
-                ItemStack sim = transItem.copy();
-                boolean test = false;
-                for (int i = 0; i < inv.getSlots(); i++) {
-                    ItemStack insertResult = inv.insertItem(i, sim, true);
-                    if (insertResult.isEmpty()) {
-                        invSlotMap.merge(i, sim.copy(), (s, o) -> {
-                            s.grow(o.getCount());
-                            return s;
-                        });
-                        sim.setCount(0);
-                        break;
-                    } else if (insertResult.getCount() == sim.getCount()) {
-                        continue;
-                    } else {
-                        ItemStack insertSuccess = sim.copy();
-                        insertSuccess.shrink(insertResult.getCount());
-                        sim.setCount(insertResult.getCount());
-                        invSlotMap.merge(i, insertSuccess, (s, o) -> {
-                            s.grow(insertSuccess.getCount());
-                            return s;
-                        });
-                    }
-                }
-                if (!sim.isEmpty()) {
-                    player.sendSystemMessage(Component.translatable("message.shop.sell.failure.space"));
-                } else
-                    test = true;
-                if (!test) return;
-            }
-			//Process Transfers now that reqs have been met
+			for (ItemStack transItem : transItems) {
+				ItemStack sim = transItem.copy();
+				boolean test = false;
+				for (int i = 0; i < inv.getSlots(); i++) {
+					ItemStack insertResult = inv.insertItem(i, sim, true);
+					if (insertResult.isEmpty()) {
+						invSlotMap.merge(i, sim.copy(), (s, o) -> {
+							s.grow(o.getCount());
+							return s;
+						});
+						sim.setCount(0);
+						break;
+					} else if (insertResult.getCount() == sim.getCount()) {
+						continue;
+					} else {
+						ItemStack insertSuccess = sim.copy();
+						insertSuccess.shrink(insertResult.getCount());
+						sim.setCount(insertResult.getCount());
+						invSlotMap.merge(i, insertSuccess, (s, o) -> {
+							s.grow(insertSuccess.getCount());
+							return s;
+						});
+					}
+				}
+				if (!sim.isEmpty()) {
+					player.sendSystemMessage(Component.translatable("message.shop.sell.failure.space"));
+				} else
+					test = true;
+				if (!test)
+					return;
+			}
+			// Process Transfers now that reqs have been met
 			wsd.transferFunds(AcctTypes.PLAYER.key, shopOwner, AcctTypes.PLAYER.key, player.getUUID(), value);
 			if (Config.ENABLE_HISTORY.get()) {
 				String itemPrint = "";
-				itemsList.forEach((a) -> {itemPrint.concat(a.getAsString());});
-				MoneyMod.dbm.postEntry(System.currentTimeMillis(), shopOwner, AcctTypes.PLAYER.key, player.getServer().getProfileCache().get(shopOwner).get().getName()
-						, player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString()
-						, value, itemsList.getAsString());
+				itemsList.forEach((a) -> {
+					itemPrint.concat(a.getAsString());
+				});
+				MoneyMod.dbm.postEntry(System.currentTimeMillis(), shopOwner, AcctTypes.PLAYER.key,
+						player.getServer().getProfileCache().get(shopOwner).get().getName(), player.getUUID(),
+						AcctTypes.PLAYER.key, player.getName().getString(), value, itemsList.getAsString());
 			}
 			for (Map.Entry<Integer, ItemStack> pSlots : slotMap.entrySet()) {
 				player.getInventory().removeItem(pSlots.getKey(), pSlots.getValue().getCount());
@@ -480,13 +549,14 @@ public class EventHandler {
 			for (Map.Entry<Integer, ItemStack> map : invSlotMap.entrySet()) {
 				inv.insertItem(map.getKey(), map.getValue(), false);
 			}
-			player.sendSystemMessage(Component.translatable("message.shop.sell.success"
-					, Config.getFormattedCurrency(value), getTransItemsDisplayString(transItems)));
+			player.sendSystemMessage(Component.translatable("message.shop.sell.success",
+					Config.getFormattedCurrency(value), getTransItemsDisplayString(transItems)));
 			return;
 		}
-		//================SERVER BUY=================================================================================
-		else if (action.equalsIgnoreCase("server-buy")) { //SERVER BUY
-			//First check the available funds and stock for trade
+		// ================SERVER
+		// BUY=================================================================================
+		else if (action.equalsIgnoreCase("server-buy")) { // SERVER BUY
+			// First check the available funds and stock for trade
 			double balP = wsd.getBalance(AcctTypes.PLAYER.key, player.getUUID());
 			if (value > balP) {
 				player.sendSystemMessage(Component.translatable("message.shop.buy.failure.funds"));
@@ -495,22 +565,25 @@ public class EventHandler {
 			wsd.changeBalance(AcctTypes.PLAYER.key, player.getUUID(), -value);
 			if (Config.ENABLE_HISTORY.get()) {
 				String itemPrint = "";
-				itemsList.forEach((a) -> {itemPrint.concat(a.getAsString());});
-				MoneyMod.dbm.postEntry(System.currentTimeMillis(), DatabaseManager.NIL, AcctTypes.SERVER.key, "Server"
-						, player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString()
-						, -value, itemsList.getAsString());
+				itemsList.forEach((a) -> {
+					itemPrint.concat(a.getAsString());
+				});
+				MoneyMod.dbm.postEntry(System.currentTimeMillis(), DatabaseManager.NIL, AcctTypes.SERVER.key, "Server",
+						player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString(), -value,
+						itemsList.getAsString());
 			}
 			for (int i = 0; i < transItems.size(); i++) {
 				ItemStack pStack = transItems.get(i).copy();
 				if (!player.addItem(pStack))
 					player.drop(pStack, false);
 			}
-			player.sendSystemMessage(Component.translatable("message.shop.buy.success"
-					, getTransItemsDisplayString(transItems), Config.getFormattedCurrency(value)));
+			player.sendSystemMessage(Component.translatable("message.shop.buy.success",
+					getTransItemsDisplayString(transItems), Config.getFormattedCurrency(value)));
 			return;
 		}
-		//================SERVER SELL=================================================================================
-		else if (action.equalsIgnoreCase("server-sell")) { //SERVER SELL
+		// ================SERVER
+		// SELL=================================================================================
+		else if (action.equalsIgnoreCase("server-sell")) { // SERVER SELL
 			Map<Integer, ItemStack> slotMap = new HashMap<>();
 			for (int t = 0; t < transItems.size(); t++) {
 				int stackSize = transItems.get(t).getCount();
@@ -518,35 +591,44 @@ public class EventHandler {
 					ItemStack inSlot = player.getInventory().getItem(i).copy();
 					int count = stackSize > inSlot.getCount() ? inSlot.getCount() : stackSize;
 					inSlot.setCount(count);
-					if (slotMap.containsKey(i) && transItems.get(t).getItem().equals(slotMap.get(i).getItem()) && ItemStack.matches(transItems.get(t), slotMap.get(i))) {
-						count = stackSize+slotMap.get(i).getCount() > inSlot.getCount() ? inSlot.getCount() : stackSize+slotMap.get(i).getCount();
+					if (slotMap.containsKey(i) && transItems.get(t).getItem().equals(slotMap.get(i).getItem())
+							&& ItemStack.matches(transItems.get(t), slotMap.get(i))) {
+						count = stackSize + slotMap.get(i).getCount() > inSlot.getCount() ? inSlot.getCount()
+								: stackSize + slotMap.get(i).getCount();
 						inSlot.setCount(count);
 					}
-					if (inSlot.getItem().equals(transItems.get(t).getItem()) && ItemStack.matches(inSlot, transItems.get(t))) {
-						slotMap.merge(i, inSlot, (s, o) -> {s.grow(o.getCount()); return s;});
+					if (inSlot.getItem().equals(transItems.get(t).getItem())
+							&& ItemStack.matches(inSlot, transItems.get(t))) {
+						slotMap.merge(i, inSlot, (s, o) -> {
+							s.grow(o.getCount());
+							return s;
+						});
 						stackSize -= inSlot.getCount();
-					}						
-					if (stackSize <= 0) break;
+					}
+					if (stackSize <= 0)
+						break;
 				}
 				if (stackSize > 0) {
 					player.sendSystemMessage(Component.translatable("message.shop.sell.failure.stock"));
 					return;
 				}
-				
+
 			}
 			wsd.changeBalance(AcctTypes.PLAYER.key, player.getUUID(), value);
 			if (Config.ENABLE_HISTORY.get()) {
 				String itemPrint = "";
-				itemsList.forEach((a) -> {itemPrint.concat(a.getAsString());});
-				MoneyMod.dbm.postEntry(System.currentTimeMillis(), DatabaseManager.NIL, AcctTypes.SERVER.key, "Server"
-						, player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString()
-						, value, itemsList.getAsString());
+				itemsList.forEach((a) -> {
+					itemPrint.concat(a.getAsString());
+				});
+				MoneyMod.dbm.postEntry(System.currentTimeMillis(), DatabaseManager.NIL, AcctTypes.SERVER.key, "Server",
+						player.getUUID(), AcctTypes.PLAYER.key, player.getName().getString(), value,
+						itemsList.getAsString());
 			}
 			for (Map.Entry<Integer, ItemStack> pSlots : slotMap.entrySet()) {
 				player.getInventory().getItem(pSlots.getKey()).shrink(pSlots.getValue().getCount());
 			}
-			player.sendSystemMessage(Component.translatable("message.shop.sell.success"
-					, Config.getFormattedCurrency(value), getTransItemsDisplayString(transItems)));
+			player.sendSystemMessage(Component.translatable("message.shop.sell.success",
+					Config.getFormattedCurrency(value), getTransItemsDisplayString(transItems)));
 			return;
 		}
 	}
