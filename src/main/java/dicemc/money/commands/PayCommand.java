@@ -16,6 +16,7 @@ import dicemc.money.setup.Config;
 import dicemc.money.storage.MoneyWSD;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -24,13 +25,50 @@ public class PayCommand {
 	public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
 		for (String name : new String[] { "pay", "epay" }) {
 			dispatcher.register(Commands.literal(name)
+					.then(Commands.argument("player", EntityArgument.player())
+							.then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.01))
+									.executes(PayCommand::runOnline))));
+		}
+		for (String name : new String[] { "offpay", "eoffpay" }) {
+			dispatcher.register(Commands.literal(name)
 					.then(Commands.argument("player", StringArgumentType.word())
 							.then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.01))
-									.executes(PayCommand::run))));
+									.executes(PayCommand::runOffline))));
 		}
 	}
 
-	private static int run(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+	private static int runOnline(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+		ServerPlayer sender = context.getSource().getPlayerOrException();
+		ServerPlayer recipient = EntityArgument.getPlayer(context, "player");
+		double amount = DoubleArgumentType.getDouble(context, "amount");
+
+		UUID recipientId = recipient.getUUID();
+		String recipientName = recipient.getName().getString();
+
+		if (recipientId.equals(sender.getUUID())) {
+			context.getSource().sendFailure(Component.literal("You cannot pay yourself."));
+			return 1;
+		}
+
+		if (MoneyWSD.get().transferFunds(AcctTypes.PLAYER.key, sender.getUUID(), AcctTypes.PLAYER.key, recipientId,
+				amount)) {
+			if (Config.ENABLE_HISTORY.get()) {
+				MoneyMod.dbm.postEntry(System.currentTimeMillis(), sender.getUUID(), AcctTypes.PLAYER.key,
+						sender.getName().getString(),
+						recipientId, AcctTypes.PLAYER.key, recipientName,
+						amount, "Pay Command");
+			}
+			context.getSource().sendSuccess(() -> Component.translatable("message.command.transfer.success",
+					Config.getFormattedCurrency(amount), recipientName), true);
+			recipient.sendSystemMessage(Component.translatable("message.command.pay.received",
+					sender.getName().getString(), Config.getFormattedCurrency(amount)));
+			return 0;
+		}
+		context.getSource().sendFailure(Component.translatable("message.command.transfer.failure"));
+		return 1;
+	}
+
+	private static int runOffline(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
 		ServerPlayer sender = context.getSource().getPlayerOrException();
 		String playerName = StringArgumentType.getString(context, "player");
 		double amount = DoubleArgumentType.getDouble(context, "amount");
@@ -54,10 +92,16 @@ public class PayCommand {
 				MoneyMod.dbm.postEntry(System.currentTimeMillis(), sender.getUUID(), AcctTypes.PLAYER.key,
 						sender.getName().getString(),
 						recipientId, AcctTypes.PLAYER.key, recipientName,
-						amount, "Pay Command");
+						amount, "Pay Command (Offline)");
 			}
 			context.getSource().sendSuccess(() -> Component.translatable("message.command.transfer.success",
 					Config.getFormattedCurrency(amount), recipientName), true);
+			// Notify the recipient if they happen to be online
+			ServerPlayer onlineRecipient = context.getSource().getServer().getPlayerList().getPlayer(recipientId);
+			if (onlineRecipient != null) {
+				onlineRecipient.sendSystemMessage(Component.translatable("message.command.pay.received",
+						sender.getName().getString(), Config.getFormattedCurrency(amount)));
+			}
 			return 0;
 		}
 		context.getSource().sendFailure(Component.translatable("message.command.transfer.failure"));

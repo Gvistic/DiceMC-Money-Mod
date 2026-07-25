@@ -322,8 +322,7 @@ public class EventHandler {
 		ListTag itemsList = nbt.getList(ITEMS, Tag.TAG_COMPOUND);
 		for (int i = 0; i < itemsList.size(); i++) {
 			ItemStack stack = ItemStack.parse(provider, itemsList.getCompound(i)).orElse(new ItemStack(Items.AIR));
-			if (quantity > 1)
-				stack.setCount(quantity);
+			stack.setCount(quantity);
 			transItems.add(stack);
 		}
 		MutableComponent itemComponent = getTransItemsDisplayString(transItems);
@@ -377,8 +376,7 @@ public class EventHandler {
 		for (int i = 0; i < itemsList.size(); i++) {
 			ItemStack srcStack = ItemStack.parse(itemLookup(player.level().registryAccess()), itemsList.getCompound(i))
 					.orElse(new ItemStack(Items.AIR));
-			if (quantity > 1)
-				srcStack.setCount(quantity);
+			srcStack.setCount(quantity);
 			ItemStack keyStack = srcStack.copy();
 			keyStack.setCount(1);
 			boolean hasEntry = false;

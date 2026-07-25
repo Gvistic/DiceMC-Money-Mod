@@ -2,6 +2,7 @@
   "message.commandrootbalance": "Balance %s",
   "message.command.transfer.success": "%s transferred to %s",
   "message.command.transfer.failure": "unable to complete transfer",
+  "message.command.pay.received": "%s paid you %s",
   "message.commandfailed": "Command Failed",
   "message.command.playernotfound": "Player not found",
   "message.command.set.success": "%s balance set to %s",

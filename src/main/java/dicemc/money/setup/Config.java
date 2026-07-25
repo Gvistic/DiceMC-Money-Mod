@@ -69,7 +69,7 @@ public class Config {
 				.defineInRange("auction_tax", 0.05d, 0d, 1d);
 		AUCTION_MAX_LISTINGS = builder
 				.comment("The maximum number of active listings a player can have. Set to 0 for unlimited.")
-				.defineInRange("auction_max_listings", 10, 0, 100, Integer.class);
+				.defineInRange("auction_max_listings", 100, 0, 100, Integer.class);
 		AUCTION_DURATION = builder.comment("The number of hours an auction listing lasts before expiring.")
 				.defineInRange("auction_duration_hours", 48, 1, 720, Integer.class);
 
